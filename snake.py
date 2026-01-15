@@ -93,6 +93,11 @@ def mostrar_puntaje(puntaje, record, nivel):
         f"Puntaje: {puntaje}  Récord: {record}  Nivel: {nivel}",
         True, BLANCO
     )
+
+    fondo = texto.get_rect(topleft=(10, 10))
+    fondo.inflate_ip(10, 6)  # margen interno
+
+    pygame.draw.rect(ventana, NEGRO, fondo)
     ventana.blit(texto, (10, 10))
 
 
@@ -104,21 +109,34 @@ def dibujar_grilla():
     for y in range(0, ALTO, TAM_BLOQUE):
         pygame.draw.line(ventana, GRIS, (0, y), (ANCHO, y))
 
+def fade(ventana, color=(0, 0, 0), velocidad=10):
+    fade_surface = pygame.Surface((ANCHO, ALTO))
+    fade_surface.fill(color)
+
+    for alpha in range(0, 255, velocidad):
+        fade_surface.set_alpha(alpha)
+        ventana.blit(fade_surface, (0, 0))
+        pygame.display.update()
+        reloj.tick(60)
 
 # --------------------
 # Game Over
 # --------------------
 def game_over(puntaje):
+    fade(ventana)
     ventana.fill(NEGRO)
 
     texto = fuente_grande.render("GAME OVER", True, ROJO)
-    ventana.blit(texto, (ANCHO // 2 - 140, ALTO // 2 - 60))
+    rect = texto.get_rect(center=(ANCHO // 2, ALTO // 2 - 40))
+    ventana.blit(texto, rect)
 
     texto2 = fuente_pequena.render("R: reiniciar  |  Q: salir", True, BLANCO)
-    ventana.blit(texto2, (ANCHO // 2 - 150, ALTO // 2))
+    rect2 = texto2.get_rect(center=(ANCHO // 2, ALTO // 2 + 10))
+    ventana.blit(texto2, rect2)
 
     texto3 = fuente_pequena.render(f"Puntaje final: {puntaje}", True, BLANCO)
-    ventana.blit(texto3, (ANCHO // 2 - 120, ALTO // 2 + 30))
+    rect3 = texto3.get_rect(center=(ANCHO // 2, ALTO // 2 + 40))
+    ventana.blit(texto3, rect3)
 
     pygame.display.update()
 
@@ -195,7 +213,7 @@ def menu_opciones():
 # --------------------
 def menu():
     seleccion = 0
-    opciones = ["JUGAR", "OPCIONES", "SALIR"]
+    opciones = ["JUGAR", "OPCIONES", "AYUDA", "SALIR"]
 
     while True:
         ventana.fill(NEGRO)
@@ -227,15 +245,63 @@ def menu():
                         return
                     elif opciones[seleccion] == "OPCIONES":
                         menu_opciones()
+                    elif opciones[seleccion] == "AYUDA":
+                        pantalla_ayuda()
                     else:
                         pygame.quit()
                         sys.exit()
 
+# --------------------
+# Pantalla de Ayuda
+# --------------------
+def pantalla_ayuda():
+    while True:
+        ventana.fill(NEGRO)
 
+        titulo = fuente_grande.render("AYUDA", True, VERDE)
+        ventana.blit(titulo, (ANCHO // 2 - 80, 50))
+
+        instrucciones = [
+            "CONTROLES",
+            "",
+            "↑ ↓ ← →   Mover la serpiente",
+            "P         Pausar / Reanudar",
+            "",
+            "OBJETIVO",
+            "",
+            "Come la comida",
+            "No choques con las paredes",
+            "Ni con tu propio cuerpo",
+            "",
+            "ESC o ENTER para volver"
+        ]
+
+        y = 120
+        for linea in instrucciones:
+            texto = fuente_pequena.render(linea, True, BLANCO)
+            ventana.blit(
+                texto,
+                (ANCHO // 2 - texto.get_width() // 2, y)
+            )
+            y += 22
+
+        pygame.display.update()
+
+        for evento in pygame.event.get():
+            if evento.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+
+            if evento.type == pygame.KEYDOWN:
+                if evento.key in (pygame.K_ESCAPE, pygame.K_RETURN):
+                    return
+
+        reloj.tick(30)
 # --------------------
 # Juego principal
 # --------------------
 def juego():
+    fade(ventana)
     x = ANCHO // 2
     y = ALTO // 2
     vel_x = TAM_BLOQUE
@@ -247,9 +313,18 @@ def juego():
     serpiente = []
     largo = 3
     puntaje = 0
+
     nivel = 1
     record = leer_record()
     velocidad = 10
+    pausado = False
+
+    # Animación de nivel
+    mostrar_nivel = False
+    nivel_alpha = 0
+    nivel_estado = "in"   # in → hold → out
+    nivel_timer = 0
+
 
     comida_x = random.randrange(0, ANCHO, TAM_BLOQUE)
     comida_y = random.randrange(0, ALTO, TAM_BLOQUE)
@@ -268,8 +343,14 @@ def juego():
                     direccion_pendiente = "LEFT"
                 elif evento.key == pygame.K_RIGHT and direccion != "LEFT":
                     direccion_pendiente = "RIGHT"
+                elif evento.key == pygame.K_p:
+                    pausado = not pausado
+                    if config["sonido"]:
+                        sonido_pausa.play()
+
 
         direccion = direccion_pendiente
+        
 
         if direccion == "UP":
             vel_x, vel_y = 0, -TAM_BLOQUE
@@ -279,6 +360,48 @@ def juego():
             vel_x, vel_y = -TAM_BLOQUE, 0
         elif direccion == "RIGHT":
             vel_x, vel_y = TAM_BLOQUE, 0
+
+        # --- PAUSA ---
+        if pausado:
+            ventana.fill(NEGRO)
+            dibujar_grilla()
+
+            for i, bloque in enumerate(serpiente):
+                if i == len(serpiente) - 1:  # cabeza
+                    pygame.draw.rect(
+                        ventana, (0, 200, 0),
+                        (bloque[0], bloque[1], TAM_BLOQUE, TAM_BLOQUE),
+                        border_radius=6
+                    )
+                else:
+                    pygame.draw.rect(
+                        ventana, VERDE,
+                        (bloque[0], bloque[1], TAM_BLOQUE, TAM_BLOQUE),
+                        border_radius=4
+                    )
+
+            pygame.draw.circle(
+                ventana,
+                ROJO,
+                (comida_x + TAM_BLOQUE // 2, comida_y + TAM_BLOQUE // 2),
+                TAM_BLOQUE // 2
+            )
+
+            mostrar_puntaje(puntaje, record, nivel)
+
+            texto_pausa = fuente_grande.render("PAUSA", True, BLANCO)
+            ventana.blit(
+                texto_pausa,
+                (
+                    ANCHO // 2 - texto_pausa.get_width() // 2,
+                    ALTO // 2 - texto_pausa.get_height() // 2
+                )
+            )
+
+            pygame.display.update()
+            reloj.tick(10)
+            continue
+        # --- FIN PAUSA ---
 
         x += vel_x
         y += vel_y
@@ -304,24 +427,49 @@ def juego():
             return game_over(puntaje)
 
         if x == comida_x and y == comida_y:
+            pygame.draw.rect(
+                ventana,
+                BLANCO,
+                (x, y, TAM_BLOQUE, TAM_BLOQUE),
+                2
+            )
+
             if config["sonido"]:
                 sonido_comer.play()
             comida_x = random.randrange(0, ANCHO, TAM_BLOQUE)
             comida_y = random.randrange(0, ALTO, TAM_BLOQUE)
             largo += 1
             puntaje += 1
-            nivel = puntaje // 5 + 1
+            nuevo_nivel = puntaje // 5 + 1
+
+            if nuevo_nivel > nivel:
+                nivel = nuevo_nivel
+                mostrar_nivel = True
+                nivel_alpha = 0
+                nivel_estado = "in"
+                nivel_timer = 30
+            else:
+                nivel = nuevo_nivel
+
+
             velocidad = min(10 + nivel, 25)
 
         ventana.fill(NEGRO)
         dibujar_grilla()
 
-        for bloque in serpiente:
-            pygame.draw.rect(
-                ventana, VERDE,
-                (bloque[0], bloque[1], TAM_BLOQUE, TAM_BLOQUE),
-                border_radius=4
-            )
+        for i, bloque in enumerate(serpiente):
+            if i == len(serpiente) - 1:  # cabeza
+                pygame.draw.rect(
+                    ventana, (0, 200, 0),
+                    (bloque[0], bloque[1], TAM_BLOQUE, TAM_BLOQUE),
+                    border_radius=6
+                )
+            else:
+                pygame.draw.rect(
+                    ventana, VERDE,
+                    (bloque[0], bloque[1], TAM_BLOQUE, TAM_BLOQUE),
+                    border_radius=4
+                )
 
         pygame.draw.circle(
             ventana,
@@ -331,6 +479,33 @@ def juego():
         )
 
         mostrar_puntaje(puntaje, record, nivel)
+        # ---- ANIMACIÓN NIVEL ----
+        if mostrar_nivel:
+            texto_nivel = fuente_grande.render(f"NIVEL {nivel}", True, BLANCO)
+            texto_nivel.set_alpha(nivel_alpha)
+
+            rect = texto_nivel.get_rect(
+                center=(ANCHO // 2, ALTO // 2)
+            )
+            ventana.blit(texto_nivel, rect)
+
+            if nivel_estado == "in":
+                nivel_alpha += 10
+                if nivel_alpha >= 255:
+                    nivel_alpha = 255
+                    nivel_estado = "hold"
+
+            elif nivel_estado == "hold":
+                nivel_timer -= 1
+                if nivel_timer <= 0:
+                    nivel_estado = "out"
+
+            elif nivel_estado == "out":
+                nivel_alpha -= 10
+                if nivel_alpha <= 0:
+                    mostrar_nivel = False
+        # ---- FIN ANIMACIÓN ----
+
 
         pygame.display.update()
         reloj.tick(velocidad)
@@ -343,7 +518,9 @@ menu()
 
 while True:
     resultado = juego()
-    if resultado != "reiniciar":
-        break
+    if resultado == "reiniciar":
+        continue
+    fade(ventana)
+    menu()
 
 pygame.quit()
